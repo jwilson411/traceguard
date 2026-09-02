@@ -1,0 +1,6 @@
+{"seq": 1, "ts": "2026-01-01T00:00:00Z", "run_id": "run-7f3a", "type": "run_start", "metadata": {"agent": "researcher"}}
+{"seq": 2, "ts": "2026-01-01T00:00:01Z", "run_id": "run-7f3a", "type": "assistant_message", "content": "Looking up order A-1."}
+{"seq": 3, "ts": "2026-01-01T00:00:02Z", "run_id": "run-7f3a", "type": "tool_call", "call_id": "call-1", "name": "get_order", "arguments": {"id": "A-1"}}
+{"seq": 4, "ts": "2026-01-01T00:00:03Z", "run_id": "run-7f3a", "type": "tool_result", "call_id": "call-1", "output": {"status": "shipped"}}
+{"seq": 5, "ts": "2026-01-01T00:00:04Z", "run_id": "run-7f3a", "type": "handoff", "from": "researcher", "to": "writer"}
+{"seq": 6, "ts": "2026-01-01T00:00:05Z", "run_id": "run-7f3a", "type": "final_answer", "content": "Order A-1 shipped on Jan 1."}

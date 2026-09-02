@@ -1,0 +1,4 @@
+{"seq": 1, "ts": "2026-01-01T00:00:00Z", "run_id": "run-5d92", "type": "run_start"}
+{"seq": 2, "ts": "2026-01-01T00:00:01Z", "run_id": "run-5d92", "type": "assistant_message", "content": "Checking the ledger."}
+{"seq": 3, "ts": "2026-01-01T00:00:02Z", "run_id": "run-5d92", "type": "tool_call", "call_id": "call-1", "name": "read_ledger"}
+{"seq": 4, "ts": "2026-01-01T00:00:03Z", "run_id": "run-5d92", "type": "tool_result", "call_id": "call-1", "output": "ok", "is_error": false}
