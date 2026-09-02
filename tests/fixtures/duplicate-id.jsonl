@@ -1,0 +1,5 @@
+{"seq": 1, "ts": "2026-01-01T00:00:00Z", "run_id": "run-2b40", "type": "run_start"}
+{"seq": 2, "ts": "2026-01-01T00:00:01Z", "run_id": "run-2b40", "type": "tool_call", "call_id": "call-1", "name": "search", "arguments": {"q": "invoices"}}
+{"seq": 3, "ts": "2026-01-01T00:00:02Z", "run_id": "run-2b40", "type": "tool_call", "call_id": "call-1", "name": "search", "arguments": {"q": "receipts"}}
+{"seq": 4, "ts": "2026-01-01T00:00:03Z", "run_id": "run-2b40", "type": "tool_result", "call_id": "call-1", "output": "3 hits"}
+{"seq": 5, "ts": "2026-01-01T00:00:04Z", "run_id": "run-2b40", "type": "run_end", "status": "ok"}
