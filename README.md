@@ -17,12 +17,17 @@ checks them against a trace.
 TraceGuard makes no judgements about whether an agent did a good job. It checks structure,
 and it checks the order things happened in.
 
-Two commands, two questions:
+A failing thousand-event trace is not a useful report, so a third command answers the
+follow-up question: which handful of events, in order, demonstrate the failure — with
+secret-shaped values masked before anything is printed or saved.
+
+Three commands, three questions:
 
 | Command | Question |
 | ------- | -------- |
 | `traceguard check TRACE.jsonl` | Is this trace well-formed? |
 | `traceguard policy TRACE.jsonl POLICY.yaml` | Did it obey these safety contracts? |
+| `traceguard explain TRACE.jsonl POLICY.yaml` | Which events show it breaking one? |
 
 ## Install
 
@@ -48,6 +53,7 @@ Policies are loaded with `SafeLoader` and nothing else: no `unsafe_load`, no `Fu
 ```bash
 traceguard check path/to/TRACE.jsonl
 traceguard policy path/to/TRACE.jsonl examples/no-tool-after-final.yaml
+traceguard explain path/to/TRACE.jsonl examples/no-tool-after-final.yaml
 ```
 
 Violations print to stdout, one per line, in a stable format:
@@ -251,15 +257,103 @@ document, for instance — the line is reported as `0` rather than guessed.
 approval before a side effect, a retry ceiling, a handoff before a specialist's tools, and
 no tools after the final answer. See [examples/README.md](examples/README.md).
 
+## Explaining a violation
+
+`check` and `policy` stay one line per violation, which is what CI wants. `explain` is for
+the human reading the failure afterwards:
+
+```bash
+traceguard explain TRACE.jsonl POLICY.yaml [--json] [--save DIR] [--redact-path PATH ...]
+```
+
+```
+$ traceguard explain trace.jsonl examples/no-tool-after-final.yaml
+E_POLICY_NEVER_AFTER line=3 seq=3 rule 'no-tool-after-final': tool_call 'refund' occurs after [type=final_answer] at line 2
+  #2 line=2 trigger final_answer
+  #3 line=3 forbidden tool_call name=refund
+```
+
+Both arguments are required: `explain` is about policy failures, and a slice is only
+meaningful next to the predicate it failed. Each violation prints its usual summary line,
+then the events that demonstrate it: `#` is the event's `seq` (`-` if it has none), then
+its line, the selector it matched, its type, and its tool name if it has one. The same
+trace and policy always produce the same bytes — violations are ordered by line, then
+code, then rule id.
+
+### Slices
+
+A slice is the smallest ordered set of events that demonstrates one failure, in file
+order. Unrelated events are excluded even when they sit between two slice members, so a
+retry ceiling blown on event 900 shows you three tool calls, not nine hundred events.
+
+| Predicate | Slice |
+| --------- | ----- |
+| `before` | The unguarded `later` event alone — the `earlier` it needed does not exist |
+| `after` | The `earlier` event that was never followed |
+| `never_after` | The `trigger`, then the `forbidden` event |
+| `max_count` | The matching events only, from the first through the one that overflows — exactly `max + 1` of them |
+| `within_events` | The unsatisfied `start`, plus the first `end` that came too late or was already consumed, if there is one |
+
+Structural violations carry slices too — the offending event, plus its counterpart where a
+failure needs two events to be legible: the first call and its duplicate for
+`E_CALL_DUP`, the terminal event and the one that followed it for `E_POST_TERMINAL`. They
+are available on `Violation.events` for anything embedding the library; `explain` itself
+covers policy failures.
+
+### Redaction
+
+Evidence is only useful if it can be pasted into an issue, so `explain` masks
+secret-shaped values before anything reaches the console, `--json` or a saved file. The
+evaluator keeps seeing the original trace — selectors match plaintext, so a rule can still
+match on a value that the report will mask.
+
+Masking replaces the **value** with the literal `[REDACTED]` and never removes a key:
+`{"authorization": "[REDACTED]"}`, not `{}`. Objects and lists are walked recursively, and
+the events themselves are never mutated.
+
+Four pattern families are built in, matched with stdlib `re`:
+
+| Family | Shape |
+| ------ | ----- |
+| Bearer token | `Bearer` / `bearer` followed by a token-like remainder |
+| API key | `sk-` / `sk_live_` / `sk_test_` prefixes, and `api_key` / `api-key` / `apikey` / `access-token` / `password` labels followed by a long enough value |
+| Email | A conservative `local@domain.tld` address |
+| Phone | Phone-shaped digit runs: `+1`, ten digits, dashed, or parenthetical |
+
+A key whose *name* looks like a secret — `api_key`, `token`, `authorization`, `password`,
+`secret`, `credential` — has its value masked whole, whatever the value looks like.
+
+This is pattern matching over strings, and nothing more. It is **not a PII scanner**: it
+has no notion of names, addresses, account numbers or anything else it was not told about,
+and a secret in an unusual shape passes straight through. For those, name the path:
+
+```bash
+traceguard explain trace.jsonl policy.yaml --redact-path arguments.ssn --redact-path output.email
+```
+
+`--redact-path` takes a dotted path into the event object and is repeatable. Paths that do
+not resolve in a given event are ignored.
+
+### `--json` and `--save`
+
+`--json` prints the violations as a JSON list. Each entry carries `code`, `line`, `seq`,
+`rule` (null for structural violations), `message`, and `events` — the redacted slice,
+each event with its `number`, `line`, `role` and the redacted event object.
+
+`--save DIR` writes one evidence file per violation into `DIR`, creating it if needed. File
+names are deterministic — `v001-E_POLICY_NEVER_AFTER-line3.json`, numbered 1-based in the
+order the violations print — and the contents are the same redacted document `--json`
+produces. If `DIR` cannot be created, nothing is written and the run exits 2.
+
 ## Exit codes
 
 | Code | Meaning |
 | ---- | ------- |
 | `0` | Valid — no violations |
 | `1` | One or more violations, structural or policy (printed to stdout) |
-| `2` | Usage error, a missing or unreadable file, or a policy that will not parse (message on stderr, prefixed `traceguard:`) |
+| `2` | Usage error, a missing or unreadable file, a policy that will not parse, or a `--save` directory that cannot be created (message on stderr, prefixed `traceguard:`) |
 
-Both subcommands use the same three codes, so either one drops straight into CI.
+All three subcommands use the same three codes, so any of them drops straight into CI.
 
 ## Development
 
@@ -272,8 +366,10 @@ Fixtures in `tests/fixtures/` cover a valid trace plus one trace per failure mod
 orphan result, duplicate call id, missing terminal, post-terminal event. Policy tests
 build their traces and policies inline and cover each predicate's pass and fail cases,
 interleaved agents, the `max_count` and `within_events` boundaries, and line numbers on
-parse errors. Everything is synthetic — no real model output, no network access anywhere
-in the test suite.
+parse errors. Explain and redaction tests cover each predicate's slice, the exclusion of
+unrelated neighbours, and the absence of secrets from every output channel. Everything is
+synthetic — fake addresses, fake numbers, fake tokens, no real model output, and no
+network access anywhere in the test suite.
 
 ## Out of scope
 
@@ -282,8 +378,13 @@ Deliberately not part of this project:
 - **Framework import adapters.** Converting LangGraph/CrewAI/OpenAI-Agents traces into
   this envelope belongs outside the core, so the schema stays small and the tool keeps its
   single dependency.
-- **Trace storage.** No database, no server, no upload. A trace is a file.
-- **Live model calls.** TraceGuard reads traces; it never produces them.
+- **Trace storage.** No database, no server, no upload. A trace is a file. `--save` writes
+  evidence next to you, on your disk, and nowhere else.
+- **Live model calls.** TraceGuard reads traces; it never produces them, never replays a
+  side effect, and never calls a network.
+- **PII detection.** Redaction is a short list of pattern families plus the paths you name.
+  It is not a classifier, it makes no completeness claim, and it is not a substitute for
+  not putting secrets in a trace.
 - **Aggregate scoring.** Pass rates, quality scores, and agent-eval style rollups are a
   different problem.
 - **Embedded code in policies.** No Python snippets, no template language, no regex as a

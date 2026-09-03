@@ -25,7 +25,7 @@ from typing import Any, Iterable, Sequence
 
 import yaml
 
-from .schema import EVENT_TYPES, Violation, is_int
+from .schema import EVENT_TYPES, SliceEvent, Violation, is_int
 
 __all__ = [
     "POLICY_CODES",
@@ -203,6 +203,13 @@ class Selector:
         return " ".join(parts)
 
 
+def _slice(*members: tuple[TraceEvent, str]) -> tuple[SliceEvent, ...]:
+    """Build an evidence slice from (event, role) pairs, in trace order."""
+    return tuple(
+        SliceEvent(event.line, event.seq, role, event.event) for event, role in members
+    )
+
+
 def _describe_event(event: TraceEvent) -> str:
     raw = event.event
     kind = raw.get("type")
@@ -237,6 +244,8 @@ class BeforeRule:
                         event.seq,
                         f"rule {self.id!r}: {_describe_event(event)} with no preceding"
                         f" [{self.earlier.describe()}]",
+                        rule=self.id,
+                        events=_slice((event, "later")),
                     )
                 )
             if self.earlier.matches(event):
@@ -265,6 +274,8 @@ class AfterRule:
                 event.seq,
                 f"rule {self.id!r}: {_describe_event(event)} is never followed by"
                 f" [{self.later.describe()}]",
+                rule=self.id,
+                events=_slice((event, "earlier")),
             )
             for index, event in enumerate(events)
             if index >= last_later and self.earlier.matches(event)
@@ -282,20 +293,22 @@ class NeverAfterRule:
 
     def evaluate(self, events: Sequence[TraceEvent]) -> list[Violation]:
         violations = []
-        trigger_line: int | None = None
+        trigger: TraceEvent | None = None
         for event in events:
-            if trigger_line is not None and self.forbidden.matches(event):
+            if trigger is not None and self.forbidden.matches(event):
                 violations.append(
                     Violation(
                         E_POLICY_NEVER_AFTER,
                         event.line,
                         event.seq,
                         f"rule {self.id!r}: {_describe_event(event)} occurs after"
-                        f" [{self.trigger.describe()}] at line {trigger_line}",
+                        f" [{self.trigger.describe()}] at line {trigger.line}",
+                        rule=self.id,
+                        events=_slice((trigger, "trigger"), (event, "forbidden")),
                     )
                 )
-            elif trigger_line is None and self.trigger.matches(event):
-                trigger_line = event.line
+            elif trigger is None and self.trigger.matches(event):
+                trigger = event
         return violations
 
 
@@ -309,12 +322,12 @@ class MaxCountRule:
     max: int
 
     def evaluate(self, events: Sequence[TraceEvent]) -> list[Violation]:
-        seen = 0
+        matched: list[TraceEvent] = []
         for event in events:
             if not self.match.matches(event):
                 continue
-            seen += 1
-            if seen > self.max:
+            matched.append(event)
+            if len(matched) > self.max:
                 return [
                     Violation(
                         E_POLICY_MAX_COUNT,
@@ -322,6 +335,8 @@ class MaxCountRule:
                         event.seq,
                         f"rule {self.id!r}: more than {self.max} events match"
                         f" [{self.match.describe()}]",
+                        rule=self.id,
+                        events=_slice(*((found, "match") for found in matched)),
                     )
                 ]
         return []
@@ -364,11 +379,34 @@ class WithinEventsRule:
                         event.seq,
                         f"rule {self.id!r}: {_describe_event(event)} has no"
                         f" [{self.end.describe()}] within {self.window} events",
+                        rule=self.id,
+                        events=self._evidence(events, index, event),
                     )
                 )
             else:
                 consumed.add(matched)
         return violations
+
+    def _evidence(
+        self, events: Sequence[TraceEvent], index: int, start: TraceEvent
+    ) -> tuple[SliceEvent, ...]:
+        """The unsatisfied ``start``, plus the first ``end`` that came too late.
+
+        Any end matching after the start is by construction unusable — outside
+        the window, or already consumed by an earlier start — so showing the
+        first one makes the failure visible without dumping the window.
+        """
+        late = next(
+            (
+                events[at]
+                for at in range(index + 1, len(events))
+                if self.end.matches(events[at])
+            ),
+            None,
+        )
+        if late is None:
+            return _slice((start, "start"))
+        return _slice((start, "start"), (late, "end"))
 
 
 Rule = BeforeRule | AfterRule | NeverAfterRule | MaxCountRule | WithinEventsRule
