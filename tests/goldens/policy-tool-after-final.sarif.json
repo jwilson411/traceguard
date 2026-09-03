@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "results": [
+        {
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/ci/tool-after-final.jsonl"
+                },
+                "region": {
+                  "startLine": 3
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "E_POLICY_NEVER_AFTER line=3 seq=3 rule 'no-tool-after-final': tool_call 'refund' occurs after [type=final_answer] at line 2"
+          },
+          "properties": {
+            "evidence": [
+              {
+                "line": 2,
+                "role": "trigger",
+                "seq": 2,
+                "type": "final_answer"
+              },
+              {
+                "line": 3,
+                "name": "refund",
+                "role": "forbidden",
+                "seq": 3,
+                "type": "tool_call"
+              }
+            ],
+            "rule": "no-tool-after-final",
+            "seq": 3
+          },
+          "ruleId": "E_POLICY_NEVER_AFTER"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/jwilson411/traceguard",
+          "name": "traceguard",
+          "rules": [
+            {
+              "id": "E_POLICY_NEVER_AFTER",
+              "name": "E_POLICY_NEVER_AFTER",
+              "shortDescription": {
+                "text": "A 'forbidden' event never occurs after its trigger."
+              }
+            }
+          ],
+          "version": "0.1.0"
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

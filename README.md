@@ -351,9 +351,113 @@ produces. If `DIR` cannot be created, nothing is written and the run exits 2.
 | ---- | ------- |
 | `0` | Valid — no violations |
 | `1` | One or more violations, structural or policy (printed to stdout) |
-| `2` | Usage error, a missing or unreadable file, a policy that will not parse, or a `--save` directory that cannot be created (message on stderr, prefixed `traceguard:`) |
+| `2` | Usage error, a missing or unreadable file, a policy that will not parse, or a report or `--save` directory that cannot be written (message on stderr, prefixed `traceguard:`) |
 
 All three subcommands use the same three codes, so any of them drops straight into CI.
+
+## CI and tests
+
+A contract that only runs when someone remembers to run it is not a contract. The same
+checks are available three ways: from the shell, from a normal pytest test, and from a
+GitHub Actions job. All three read files on disk and nothing else.
+
+### Local CLI: JUnit and SARIF
+
+`check` and `policy` take `--format {text,junit,sarif}` and an optional `--output PATH`.
+
+```bash
+traceguard check TRACE.jsonl --format sarif --output traceguard.sarif
+traceguard check TRACE.jsonl --format junit --output traceguard.junit.xml
+traceguard policy TRACE.jsonl POLICY.yaml --format sarif --output traceguard.sarif
+```
+
+Without `--output` the report goes to stdout. Without `--format` the output is the text
+one violation per line described above, unchanged: existing scripts keep working, and a
+clean trace still prints nothing.
+
+| Format | Shape |
+| ------ | ----- |
+| `text` | The default. One `{code} line={n} seq={seq_or_-} {message}` line per violation |
+| `junit` | A JUnit `testsuite`. A clean trace is one passing testcase; each violation is a failing testcase whose `message` is the violation line and whose `system-out` holds the evidence slice |
+| `sarif` | SARIF 2.1.0. Rule ids are the violation codes (`E_POST_TERMINAL`, `E_POLICY_NEVER_AFTER`, ...), so a triage decision recorded against one keeps its meaning |
+
+Each SARIF result carries the trace path and the violation's line, so a code scanning view
+annotates the offending event. `properties` holds the `seq`, the policy `rule` id when
+there is one, and the evidence slice reduced to `line`, `seq`, `role`, `type` and tool
+`name`. Raw event payloads never reach a report: arguments and outputs are where secrets
+live, and a report is the artifact most likely to be attached to a build. Messages are
+masked through the same pattern families `explain` uses.
+
+Exit codes do not change: `0` clean, `1` violations, `2` a file that cannot be read or a
+report that cannot be written. Reports are deterministic, so committing one as a baseline
+and diffing it is a reasonable thing to do.
+
+### Pytest
+
+```bash
+pip install -e ".[dev]"
+```
+
+pytest stays optional. It is not a runtime dependency, `import traceguard` never imports
+it, and the validator works with no pytest installed. The adapter lives in its own module
+and exposes one assertion helper:
+
+```python
+from traceguard.pytest_plugin import assert_trace
+
+
+def test_support_run_is_well_formed():
+    assert_trace("tests/traces/support-handoff.jsonl")
+
+
+def test_support_run_obeys_the_contract():
+    assert_trace("tests/traces/order-lookup.jsonl", "examples/no-tool-after-final.yaml")
+```
+
+`assert_trace(trace, policy=None)` fails the test if the trace is structurally invalid, or
+if a policy is given and any of its rules fails. The failure message is the same one the
+CLI prints, one violation line per violation, so a pytest failure and a CI report say the
+same thing. A file that cannot be read raises `OSError` and a policy that will not parse
+raises `PolicyParseError`: neither is a property of the trace.
+
+Installing the package also registers a pytest plugin that collects traces directly. Every
+`.jsonl` file under the traces directory becomes a test node named `traceguard`:
+
+```
+tests/traces/order-lookup.jsonl      + order-lookup.yaml  ->  structure and policy
+tests/traces/support-handoff.jsonl                        ->  structure only
+```
+
+```
+$ pytest -q tests/traces
+tests/traces/order-lookup.jsonl::traceguard PASSED
+tests/traces/support-handoff.jsonl::traceguard PASSED
+```
+
+A trace paired with a policy of the same stem (`name.jsonl` beside `name.yaml` or
+`name.yml`) is held to that policy as well. The directory defaults to `tests/traces` and is
+configurable:
+
+```ini
+[pytest]
+traceguard_traces = path/to/dir
+```
+
+If the directory does not exist, nothing is collected and nothing is reported. That is the
+whole plugin: one helper, one ini option, no fixtures and no markers to learn.
+
+### GitHub Actions
+
+[`.github/workflows/traceguard-sample.yml`](.github/workflows/traceguard-sample.yml) is a
+worked example. It checks out the repository, installs the package, runs `check` and
+`policy` against a passing trace, then demonstrates a failure: `examples/ci/tool-after-final.jsonl`
+calls a tool after its final answer, and is written out as both SARIF and JUnit.
+
+That last step expects exit code 1 and asserts it explicitly rather than using
+`continue-on-error`, which would also swallow the exit code 2 of a policy that stopped
+parsing. Reports are written to the runner's own disk and are not uploaded anywhere. The
+job installs from the checkout and touches no network beyond the `checkout` and
+`setup-python` actions.
 
 ## Development
 
@@ -367,7 +471,10 @@ orphan result, duplicate call id, missing terminal, post-terminal event. Policy 
 build their traces and policies inline and cover each predicate's pass and fail cases,
 interleaved agents, the `max_count` and `within_events` boundaries, and line numbers on
 parse errors. Explain and redaction tests cover each predicate's slice, the exclusion of
-unrelated neighbours, and the absence of secrets from every output channel. Everything is
+unrelated neighbours, and the absence of secrets from every output channel. JUnit and
+SARIF documents are pinned byte for byte against goldens in `tests/goldens/`; regenerate
+one deliberately, since a diff there is the point of the test. The traces in
+`tests/traces/` are collected by the plugin during the suite's own run. Everything is
 synthetic — fake addresses, fake numbers, fake tokens, no real model output, and no
 network access anywhere in the test suite.
 

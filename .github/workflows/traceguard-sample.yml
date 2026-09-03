@@ -1,0 +1,75 @@
+name: traceguard-sample
+
+# A worked example of gating a pull request on trace contracts. It runs against
+# traces that live in this repository, writes its reports to the runner's own
+# disk, and talks to nothing else.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  traces:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+
+      # A trace that satisfies both the structure and the contract. Any
+      # violation here fails the job, which is the point of the step.
+      - name: Check a passing trace
+        run: python -m traceguard.cli check tests/fixtures/valid.jsonl
+
+      - name: Hold a passing trace to a policy
+        run: |
+          python -m traceguard.cli policy \
+            tests/fixtures/valid.jsonl \
+            examples/no-tool-after-final.yaml
+
+      # The demonstration: a trace that calls a tool after the final answer.
+      # Exit code 1 is the expected result, so the step asserts it rather than
+      # ignoring it. continue-on-error would also swallow an exit code 2, and
+      # a policy that will not parse is not a demonstrated failure.
+      - name: Demonstrate a failing trace as SARIF
+        run: |
+          set +e
+          python -m traceguard.cli policy \
+            examples/ci/tool-after-final.jsonl \
+            examples/no-tool-after-final.yaml \
+            --format sarif --output /tmp/traceguard.sarif
+          status=$?
+          set -e
+          if [ "$status" -ne 1 ]; then
+            echo "expected exit code 1 from the demo trace, got $status"
+            exit 1
+          fi
+          cat /tmp/traceguard.sarif
+
+      - name: Demonstrate a failing trace as JUnit
+        run: |
+          set +e
+          python -m traceguard.cli policy \
+            examples/ci/tool-after-final.jsonl \
+            examples/no-tool-after-final.yaml \
+            --format junit --output /tmp/traceguard.junit.xml
+          status=$?
+          set -e
+          if [ "$status" -ne 1 ]; then
+            echo "expected exit code 1 from the demo trace, got $status"
+            exit 1
+          fi
+          cat /tmp/traceguard.junit.xml
+
+      # The same traces, asserted through pytest instead of the CLI: the plugin
+      # collects tests/traces/*.jsonl and their sibling policies.
+      - name: Run the trace fixtures through pytest
+        run: python -m pytest -q tests/traces

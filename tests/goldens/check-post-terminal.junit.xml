@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuite name="traceguard.check" tests="1" failures="1" errors="0">
+  <testcase classname="traceguard.check" name="E_POST_TERMINAL line=3">
+    <failure message="E_POST_TERMINAL line=3 seq=3 event 'assistant_message' appears after the terminal event" type="E_POST_TERMINAL">tests/fixtures/post-terminal.jsonl: E_POST_TERMINAL line=3 seq=3 event 'assistant_message' appears after the terminal event</failure>
+    <system-out>E_POST_TERMINAL line=3 seq=3 event 'assistant_message' appears after the terminal event
+  #2 line=2 terminal final_answer
+  #3 line=3 post_terminal assistant_message
+</system-out>
+  </testcase>
+</testsuite>
