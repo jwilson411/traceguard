@@ -16,3 +16,9 @@ traceguard policy path/to/TRACE.jsonl examples/no-tool-after-final.yaml
 
 Tool names (`refund`, `search`, …) and agent ids (`specialist`) are illustrative:
 change them to the ones your agent actually emits.
+
+[`ci/tool-after-final.jsonl`](ci/tool-after-final.jsonl) is a trace that breaks
+`no-tool-after-final.yaml`. It exists so the sample workflow in
+[`.github/workflows/traceguard-sample.yml`](../.github/workflows/traceguard-sample.yml)
+can demonstrate a failure. It is kept out of `tests/traces/`, where the pytest
+plugin would collect it and fail the suite.

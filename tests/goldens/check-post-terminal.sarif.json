@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "results": [
+        {
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "tests/fixtures/post-terminal.jsonl"
+                },
+                "region": {
+                  "startLine": 3
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "E_POST_TERMINAL line=3 seq=3 event 'assistant_message' appears after the terminal event"
+          },
+          "properties": {
+            "evidence": [
+              {
+                "line": 2,
+                "role": "terminal",
+                "seq": 2,
+                "type": "final_answer"
+              },
+              {
+                "line": 3,
+                "role": "post_terminal",
+                "seq": 3,
+                "type": "assistant_message"
+              }
+            ],
+            "seq": 3
+          },
+          "ruleId": "E_POST_TERMINAL"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/jwilson411/traceguard",
+          "name": "traceguard",
+          "rules": [
+            {
+              "id": "E_POST_TERMINAL",
+              "name": "E_POST_TERMINAL",
+              "shortDescription": {
+                "text": "No event follows the terminal event."
+              }
+            }
+          ],
+          "version": "0.1.0"
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuite name="traceguard.policy" tests="1" failures="1" errors="0">
+  <testcase classname="traceguard.policy" name="E_POLICY_NEVER_AFTER line=3">
+    <failure message="E_POLICY_NEVER_AFTER line=3 seq=3 rule 'no-tool-after-final': tool_call 'refund' occurs after [type=final_answer] at line 2" type="E_POLICY_NEVER_AFTER">examples/ci/tool-after-final.jsonl: E_POLICY_NEVER_AFTER line=3 seq=3 rule 'no-tool-after-final': tool_call 'refund' occurs after [type=final_answer] at line 2</failure>
+    <system-out>E_POLICY_NEVER_AFTER line=3 seq=3 rule 'no-tool-after-final': tool_call 'refund' occurs after [type=final_answer] at line 2
+  #2 line=2 trigger final_answer
+  #3 line=3 forbidden tool_call name=refund
+</system-out>
+  </testcase>
+</testsuite>

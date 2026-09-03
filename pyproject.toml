@@ -23,9 +23,13 @@ dependencies = ["PyYAML>=6.0"]
 
 [project.optional-dependencies]
 dev = ["pytest>=7.4"]
+pytest = ["pytest>=7.4"]
 
 [project.scripts]
 traceguard = "traceguard.cli:main"
+
+[project.entry-points.pytest11]
+traceguard = "traceguard.pytest_plugin"
 
 [project.urls]
 Homepage = "https://github.com/jwilson411/traceguard"
@@ -36,3 +40,5 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+# pytester runs the collection tests in tests/test_pytest_plugin.py.
+addopts = ["-p", "pytester"]
