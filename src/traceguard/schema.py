@@ -154,13 +154,37 @@ def schema_errors(event: dict[str, Any]) -> list[str]:
 
 
 @dataclass(frozen=True)
+class SliceEvent:
+    """One event of a violation's evidence slice, with the role it played.
+
+    ``role`` names the selector or structural position that made this event
+    part of the failure — ``later``, ``trigger``, ``forbidden``, ``match``,
+    ``start``, ``end`` for policy rules, and short structural labels such as
+    ``duplicate`` or ``post_terminal`` for the checker.
+    """
+
+    line: int
+    seq: int | None
+    role: str
+    event: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class Violation:
-    """One structural problem, anchored to a 1-based file line."""
+    """One structural problem, anchored to a 1-based file line.
+
+    ``events`` is the minimal ordered slice of the trace that demonstrates this
+    failure, in file order. Unrelated events are excluded even when they sit
+    between two slice members. The slice holds references to the original event
+    objects; redaction happens at the output boundary, never here.
+    """
 
     code: str
     line: int
     seq: int | None
     message: str
+    rule: str | None = None
+    events: tuple[SliceEvent, ...] = ()
 
     def format(self) -> str:
         seq = "-" if self.seq is None else str(self.seq)

@@ -26,6 +26,7 @@ from .schema import (
     E_TERMINAL_MISSING,
     E_TERMINAL_MULTIPLE,
     TERMINAL_TYPES,
+    SliceEvent,
     Violation,
     is_int,
     schema_errors,
@@ -41,6 +42,14 @@ class _Record:
     line: int
     seq: int | None
     event: dict[str, Any]
+
+
+def _slice(*members: tuple[_Record, str]) -> tuple[SliceEvent, ...]:
+    """Build an evidence slice from (record, role) pairs, in file order."""
+    return tuple(
+        SliceEvent(record.line, record.seq, role, record.event)
+        for record, role in members
+    )
 
 
 def check_file(path: str | PathLike[str]) -> list[Violation]:
@@ -108,7 +117,13 @@ def _sort_key(violation: Violation) -> tuple[int, str]:
 
 def _check_schema(records: list[_Record]) -> list[Violation]:
     return [
-        Violation(E_SCHEMA, record.line, record.seq, message)
+        Violation(
+            E_SCHEMA,
+            record.line,
+            record.seq,
+            message,
+            events=_slice((record, "event")),
+        )
         for record in records
         for message in schema_errors(record.event)
     ]
@@ -119,7 +134,13 @@ def _check_run_start(records: list[_Record]) -> list[Violation]:
     if first.event.get("type") == "run_start":
         return []
     return [
-        Violation(E_RUN_START, first.line, first.seq, "first event must be run_start")
+        Violation(
+            E_RUN_START,
+            first.line,
+            first.seq,
+            "first event must be run_start",
+            events=_slice((first, "event")),
+        )
     ]
 
 
@@ -140,6 +161,7 @@ def _check_seq(records: list[_Record]) -> list[Violation]:
                     record.line,
                     record.seq,
                     f"seq must be {position}, got {record.seq}",
+                    events=_slice((record, "event")),
                 )
             )
     return violations
@@ -161,6 +183,7 @@ def _check_run_id(records: list[_Record]) -> list[Violation]:
                     record.line,
                     record.seq,
                     f"run_id changed from {baseline!r} to {run_id!r}",
+                    events=_slice((record, "event")),
                 )
             )
     return violations
@@ -169,7 +192,7 @@ def _check_run_id(records: list[_Record]) -> list[Violation]:
 def _check_tool_calls(records: list[_Record]) -> list[Violation]:
     """Duplicate call ids, orphan results, and calls that never resolve."""
     violations = []
-    opened: set[str] = set()
+    opened: dict[str, _Record] = {}
     calls: list[tuple[int, _Record, str]] = []  # (position, record, call_id)
     results: dict[str, list[int]] = {}
 
@@ -186,9 +209,13 @@ def _check_tool_calls(records: list[_Record]) -> list[Violation]:
                         record.line,
                         record.seq,
                         f"duplicate tool_call call_id {call_id!r}",
+                        events=_slice(
+                            (opened[call_id], "call"), (record, "duplicate")
+                        ),
                     )
                 )
-            opened.add(call_id)
+            else:
+                opened[call_id] = record
             calls.append((position, record, call_id))
         elif event.get("type") == "tool_result":
             if call_id not in opened:
@@ -198,6 +225,7 @@ def _check_tool_calls(records: list[_Record]) -> list[Violation]:
                         record.line,
                         record.seq,
                         f"tool_result for unknown call_id {call_id!r}",
+                        events=_slice((record, "orphan")),
                     )
                 )
             results.setdefault(call_id, []).append(position)
@@ -210,6 +238,7 @@ def _check_tool_calls(records: list[_Record]) -> list[Violation]:
                     record.line,
                     record.seq,
                     f"tool_call {call_id!r} has no tool_result",
+                    events=_slice((record, "call")),
                 )
             )
     return violations
@@ -229,9 +258,11 @@ def _check_terminal(records: list[_Record]) -> list[Violation]:
                 last.line,
                 last.seq,
                 "trace has no terminal event (final_answer or run_end)",
+                events=_slice((last, "event")),
             )
         ]
 
+    first_terminal = records[terminals[0]]
     violations = []
     for position in terminals[1:]:
         record = records[position]
@@ -241,6 +272,7 @@ def _check_terminal(records: list[_Record]) -> list[Violation]:
                 record.line,
                 record.seq,
                 f"additional terminal event {record.event['type']!r}",
+                events=_slice((first_terminal, "terminal"), (record, "additional")),
             )
         )
     for record in records[terminals[0] + 1 :]:
@@ -250,6 +282,9 @@ def _check_terminal(records: list[_Record]) -> list[Violation]:
                 record.line,
                 record.seq,
                 f"event {record.event.get('type')!r} appears after the terminal event",
+                events=_slice(
+                    (first_terminal, "terminal"), (record, "post_terminal")
+                ),
             )
         )
     return violations
