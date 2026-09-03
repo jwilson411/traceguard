@@ -1,0 +1,14 @@
+# Cap how many times a single tool may be called, so retry loops stay bounded.
+rules:
+  - id: max-search-retries
+    max_count:
+      match:
+        type: tool_call
+        name: search
+      max: 3
+
+  - id: max-errors
+    max_count:
+      match:
+        type: error
+      max: 2

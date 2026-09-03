@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "traceguard"
 version = "0.1.0"
-description = "Structural validator for JSONL agent run traces."
+description = "Structural validator and temporal policy checker for JSONL agent run traces."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Justin Wilson" }]
-keywords = ["agents", "traces", "jsonl", "validation", "observability"]
+keywords = ["agents", "traces", "jsonl", "validation", "observability", "policy"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
@@ -19,7 +19,7 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Topic :: Software Development :: Quality Assurance",
 ]
-dependencies = []
+dependencies = ["PyYAML>=6.0"]
 
 [project.optional-dependencies]
 dev = ["pytest>=7.4"]

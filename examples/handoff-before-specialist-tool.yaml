@@ -1,0 +1,10 @@
+# The specialist agent may use tools only after control was handed off to it.
+rules:
+  - id: handoff-before-specialist-tool
+    before:
+      earlier:
+        type: handoff
+        to: specialist
+      later:
+        type: tool_call
+        agent: specialist

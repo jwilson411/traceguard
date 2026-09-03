@@ -1,0 +1,8 @@
+# Nothing may act on the world after the run has answered.
+rules:
+  - id: no-tool-after-final
+    never_after:
+      trigger:
+        type: final_answer
+      forbidden:
+        type: tool_call

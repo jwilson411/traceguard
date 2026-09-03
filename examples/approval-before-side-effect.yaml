@@ -1,0 +1,19 @@
+# A side-effecting tool may run only after an approval has been requested.
+rules:
+  - id: approval-before-refund
+    before:
+      earlier:
+        type: tool_call
+        name: request_approval
+      later:
+        type: tool_call
+        name: refund
+
+  - id: approval-before-send-email
+    before:
+      earlier:
+        type: tool_call
+        name: request_approval
+      later:
+        type: tool_call
+        name: send_email
